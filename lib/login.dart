@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'admin/mainpage_admin.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'riwayat.dart';
 import 'register.dart';
@@ -48,23 +50,47 @@ class _LoginPageState extends State<LoginPage> {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    // Validasi input kosong
     if (email.isEmpty || password.isEmpty) {
       _showError('Email dan password tidak boleh kosong');
       return;
     }
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      // 1️⃣ Login Auth
+      UserCredential cred = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: password);
+
+      final uid = cred.user!.uid;
+
+      // 2️⃣ Ambil role dari Firestore
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+
+      if (!userDoc.exists) {
+        _showError('Data user tidak ditemukan');
+        return;
+      }
+
+      final roles = userDoc['roles'];
 
       if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const MainPage()),
-      );
+
+      // 3️⃣ Redirect berdasarkan role
+      if (roles == 'admin') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const MainPageGuru()),
+        );
+      } else if (roles == 'siswa') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const MainPage()),
+        );
+      } else {
+        _showError('Role tidak valid');
+      }
     } on FirebaseAuthException catch (e) {
       switch (e.code) {
         case 'user-not-found':
@@ -73,14 +99,8 @@ class _LoginPageState extends State<LoginPage> {
         case 'wrong-password':
           _showError('Password salah');
           break;
-        case 'invalid-email':
-          _showError('Format email tidak valid');
-          break;
-        case 'user-disabled':
-          _showError('Akun ini telah dinonaktifkan');
-          break;
         default:
-          _showError('Login gagal, coba lagi');
+          _showError('Login gagal');
       }
     } catch (e) {
       _showError('Terjadi kesalahan: $e');

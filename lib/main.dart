@@ -6,6 +6,8 @@ import 'login.dart';
 import 'register.dart';
 import 'maps.dart';
 import 'mainpage.dart';
+import 'admin/data_siswa.dart';
+import 'admin/mainpage_admin.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
