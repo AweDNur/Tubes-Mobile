@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "650937520834",
+    "project_id": "tubes-b91ea",
+    "storage_bucket": "tubes-b91ea.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:650937520834:android:618964cae3ef740e22a15b",
+        "android_client_info": {
+          "package_name": "com.example.flutter_application_tubes"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBwpYtYIQZttGkZ1muOr7WaRjF1hBdBOYE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
