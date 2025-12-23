@@ -1,24 +1,22 @@
 import 'package:flutter/material.dart';
-import 'maps.dart';
-import 'riwayat.dart';
-import 'profile.dart';
-import 'admin/data_siswa.dart';
+import 'data_siswa.dart';
+import 'set_location.dart';
+import 'profile_admin.dart';
 
-class MainPage extends StatefulWidget {
-  const MainPage({super.key});
+class MainPageGuru extends StatefulWidget {
+  const MainPageGuru({super.key});
 
   @override
-  State<MainPage> createState() => _MainPageState();
+  State<MainPageGuru> createState() => _MainPageState();
 }
 
-class _MainPageState extends State<MainPage> {
+class _MainPageState extends State<MainPageGuru> {
   int _currentIndex = 0;
 
   final List<Widget> _pages = const [
-    AbsensiPage(),
-    MapsPage(),
+    DataSiswa(),
+    SetLocationPage(),
     ProfilePage(),
-    // DataSiswa()
   ];
 
   @override
