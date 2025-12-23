@@ -15,11 +15,16 @@ class SetLocationPage extends StatefulWidget {
 class _MapsPageState extends State<SetLocationPage> {
   String _username = '';
 
+  bool _mapReady = false;
+
   @override
   void initState() {
     super.initState();
     _loadUserData();
+    _loadAbsensiLocation();
   }
+
+  LatLng _selectedLocation = _initialPosition;
 
   late GoogleMapController _mapController;
 
@@ -68,8 +73,8 @@ class _MapsPageState extends State<SetLocationPage> {
     final distance = Geolocator.distanceBetween(
       position.latitude,
       position.longitude,
-      _initialPosition.latitude,
-      _initialPosition.longitude,
+      _selectedLocation.latitude,
+      _selectedLocation.longitude,
     );
 
     if (distance > maxDistanceMeter) {
@@ -85,6 +90,51 @@ class _MapsPageState extends State<SetLocationPage> {
     );
 
     // TODO: simpan ke Firebase
+  }
+
+  Future<void> _saveAbsensiLocation() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('settings')
+          .doc('absensi')
+          .set({
+            'latitude': _selectedLocation.latitude,
+            'longitude': _selectedLocation.longitude,
+            'radius': maxDistanceMeter,
+            'updatedBy': user.uid,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+
+      _showMessage('Lokasi absensi berhasil disimpan');
+    } catch (e) {
+      _showMessage('Gagal menyimpan lokasi');
+    }
+  }
+
+  Future<void> _loadAbsensiLocation() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('settings')
+          .doc('absensi')
+          .get();
+
+      if (!doc.exists) return;
+
+      final data = doc.data()!;
+
+      _selectedLocation = LatLng(data['latitude'], data['longitude']);
+
+      setState(() {});
+
+      if (_mapReady) {
+        _mapController.animateCamera(CameraUpdate.newLatLng(_selectedLocation));
+      }
+    } catch (e) {
+      debugPrint('Gagal load lokasi absensi: $e');
+    }
   }
 
   void _showMessage(String message) {
@@ -155,17 +205,23 @@ class _MapsPageState extends State<SetLocationPage> {
                     zoom: 14,
                   ),
                   markers: {
-                    const Marker(
-                      markerId: MarkerId('kantor'),
-                      position: _initialPosition,
-                      infoWindow: InfoWindow(title: 'Lokasi Absensi'),
+                    Marker(
+                      markerId: const MarkerId('absensi'),
+                      position: _selectedLocation,
+                      infoWindow: const InfoWindow(title: 'Lokasi Absensi'),
                     ),
                   },
                   myLocationEnabled: true,
                   myLocationButtonEnabled: false,
                   zoomControlsEnabled: false,
+                  onTap: (latLng) {
+                    setState(() {
+                      _selectedLocation = latLng;
+                    });
+                  },
                   onMapCreated: (controller) {
                     _mapController = controller;
+                    _mapReady = true;
                   },
                 ),
 
@@ -199,8 +255,8 @@ class _MapsPageState extends State<SetLocationPage> {
                                 borderRadius: BorderRadius.circular(14),
                               ),
                             ),
-                            onPressed: () {
-                              
+                            onPressed: () async {
+                              await _saveAbsensiLocation();
                             },
                             child: const Text(
                               'Set Location',
