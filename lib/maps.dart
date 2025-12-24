@@ -14,18 +14,18 @@ class MapsPage extends StatefulWidget {
 
 class _MapsPageState extends State<MapsPage> {
   String _username = '';
+  bool _canAbsenMasuk = true;
+  bool _canAbsenKeluar = true;
+
+  GoogleMapController? _mapController;
+  static const double maxDistanceMeter = 3000;
 
   @override
   void initState() {
     super.initState();
     _loadUserData();
+    _checkTodayAbsensi();
   }
-
-  late GoogleMapController _mapController;
-
-  static const LatLng _initialPosition = LatLng(-7.311269, 112.728885);
-
-  static const double maxDistanceMeter = 3000;
 
   Future<void> _loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -49,12 +49,62 @@ class _MapsPageState extends State<MapsPage> {
     }
   }
 
+  Future<void> _checkTodayAbsensi() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('absensi')
+        .where('uid', isEqualTo: user.uid)
+        .where('timestamp', isGreaterThanOrEqualTo: todayStart)
+        .where('timestamp', isLessThanOrEqualTo: todayEnd)
+        .get();
+
+    if (!mounted) return;
+    setState(() {
+      _canAbsenMasuk = !snapshot.docs.any(
+        (doc) => (doc.data()['type'] as String).toLowerCase().contains('masuk'),
+      );
+      _canAbsenKeluar = !snapshot.docs.any(
+        (doc) =>
+            (doc.data()['type'] as String).toLowerCase().contains('keluar'),
+      );
+    });
+  }
+
   Future<bool> _checkLocationPermission() async {
     final status = await Permission.location.request();
     return status.isGranted;
   }
 
   Future<void> _handleAbsensi(String type) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    if ((type == 'Absen Masuk' && !_canAbsenMasuk) ||
+        (type == 'Absen Keluar' && !_canAbsenKeluar)) {
+      _showMessage(
+        'Sudah absen ${type.contains('Masuk') ? 'masuk' : 'keluar'} hari ini',
+      );
+      return;
+    }
+
+    final docSettings = await FirebaseFirestore.instance
+        .collection('settings')
+        .doc('absensi')
+        .get();
+    final data = docSettings.data();
+    if (data == null || data['latitude'] == null || data['longitude'] == null) {
+      _showMessage('Lokasi absensi belum tersedia');
+      return;
+    }
+
+    final LatLng absensiLocation = LatLng(data['latitude'], data['longitude']);
+
     final hasPermission = await _checkLocationPermission();
     if (!hasPermission) {
       _showMessage('Izin lokasi ditolak');
@@ -68,8 +118,8 @@ class _MapsPageState extends State<MapsPage> {
     final distance = Geolocator.distanceBetween(
       position.latitude,
       position.longitude,
-      _initialPosition.latitude,
-      _initialPosition.longitude,
+      absensiLocation.latitude,
+      absensiLocation.longitude,
     );
 
     if (distance > maxDistanceMeter) {
@@ -79,18 +129,32 @@ class _MapsPageState extends State<MapsPage> {
       return;
     }
 
-    // ✅ ABSEN BERHASIL
+    await FirebaseFirestore.instance.collection('absensi').add({
+      'uid': user.uid,
+      'username': _username,
+      'type': type,
+      'timestamp': FieldValue.serverTimestamp(),
+      'latitude': position.latitude,
+      'longitude': position.longitude,
+    });
+
+    await _checkTodayAbsensi();
+
     _showMessage(
       '$type berhasil\nJarak ${(distance / 1000).toStringAsFixed(2)} KM',
     );
-
-    // TODO: simpan ke Firebase
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -98,12 +162,12 @@ class _MapsPageState extends State<MapsPage> {
     return Scaffold(
       body: Column(
         children: [
-          /// TOP BAR (AREA SENDIRI)
+          // TOP BAR
           SafeArea(
             bottom: false,
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.white,
                 boxShadow: [
@@ -124,17 +188,16 @@ class _MapsPageState extends State<MapsPage> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      const Text(
                         'Aplikasi Absensi Siswa',
                         style: TextStyle(fontSize: 12, color: Colors.black54),
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
                         _username.isNotEmpty ? _username : 'Memuat...',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
-                          height: 1.2,
                         ),
                       ),
                     ],
@@ -144,32 +207,51 @@ class _MapsPageState extends State<MapsPage> {
             ),
           ),
 
-          /// MAP AREA
+          // MAP AREA
           Expanded(
             child: Stack(
               children: [
-                /// GOOGLE MAP
-                GoogleMap(
-                  initialCameraPosition: const CameraPosition(
-                    target: _initialPosition,
-                    zoom: 14,
-                  ),
-                  markers: {
-                    const Marker(
-                      markerId: MarkerId('kantor'),
-                      position: _initialPosition,
-                      infoWindow: InfoWindow(title: 'Lokasi Absensi'),
-                    ),
-                  },
-                  myLocationEnabled: true,
-                  myLocationButtonEnabled: false,
-                  zoomControlsEnabled: false,
-                  onMapCreated: (controller) {
-                    _mapController = controller;
+                StreamBuilder<DocumentSnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('settings')
+                      .doc('absensi')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final data = snapshot.data!.data() as Map<String, dynamic>;
+                    final lat = data['latitude'] ?? -7.311269;
+                    final lng = data['longitude'] ?? 112.728885;
+                    final position = LatLng(lat, lng);
+
+                    return GoogleMap(
+                      initialCameraPosition: CameraPosition(
+                        target: position,
+                        zoom: 16,
+                      ),
+                      markers: {
+                        Marker(
+                          markerId: const MarkerId('absensi'),
+                          position: position,
+                          infoWindow: const InfoWindow(title: 'Lokasi Absensi'),
+                        ),
+                      },
+                      myLocationEnabled: true,
+                      myLocationButtonEnabled: false,
+                      zoomControlsEnabled: false,
+                      onMapCreated: (controller) {
+                        _mapController = controller;
+                        _mapController!.animateCamera(
+                          CameraUpdate.newLatLng(position),
+                        );
+                      },
+                    );
                   },
                 ),
 
-                /// BUTTON CARD (ABSEN)
+                // BUTTON CARD
                 Positioned(
                   left: 16,
                   right: 16,
@@ -199,9 +281,7 @@ class _MapsPageState extends State<MapsPage> {
                                 borderRadius: BorderRadius.circular(14),
                               ),
                             ),
-                            onPressed: () {
-                              _handleAbsensi('Absen Masuk');
-                            },
+                            onPressed: () => _handleAbsensi('Absen Masuk'),
                             child: const Text(
                               'Absen Masuk',
                               style: TextStyle(
@@ -223,9 +303,7 @@ class _MapsPageState extends State<MapsPage> {
                                 borderRadius: BorderRadius.circular(14),
                               ),
                             ),
-                            onPressed: () {
-                              _handleAbsensi('Absen Keluar');
-                            },
+                            onPressed: () => _handleAbsensi('Absen Keluar'),
                             child: const Text(
                               'Absen Keluar',
                               style: TextStyle(

@@ -148,7 +148,7 @@ class _MapsPageState extends State<SetLocationPage> {
     return Scaffold(
       body: Column(
         children: [
-          /// TOP BAR (AREA SENDIRI)
+          /// TOP BAR
           SafeArea(
             bottom: false,
             child: Container(
@@ -225,7 +225,7 @@ class _MapsPageState extends State<SetLocationPage> {
                   },
                 ),
 
-                /// BUTTON CARD (ABSEN)
+                /// TOMBOL (ABSEN)
                 Positioned(
                   left: 16,
                   right: 16,

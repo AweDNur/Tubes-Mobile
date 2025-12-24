@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
+
 
 class AbsensiPage extends StatefulWidget {
   const AbsensiPage({super.key});
@@ -11,11 +14,19 @@ class AbsensiPage extends StatefulWidget {
 
 class _AbsensiPageState extends State<AbsensiPage> {
   String _username = '';
+  Map<String, Map<String, String>> _absensiData =
+      {};
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _setup();
+  }
+
+  Future<void> _setup() async {
+    await initializeDateFormatting('id_ID', null);
+    await _loadUserData();
+    await _loadAbsensi();
   }
 
   Future<void> _loadUserData() async {
@@ -40,13 +51,57 @@ class _AbsensiPageState extends State<AbsensiPage> {
     }
   }
 
+  Future<void> _loadAbsensi() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('absensi')
+          .where('uid', isEqualTo: user.uid)
+          .orderBy('timestamp', descending: true)
+          .get();
+
+      final Map<String, Map<String, String>> tempData = {};
+
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        final timestamp = data['timestamp'] as Timestamp?;
+        if (timestamp == null) continue;
+
+        final type = data['type'] as String? ?? '';
+        final dateStr = DateFormat(
+          'EEEE, dd MMM yyyy',
+          'id_ID',
+        ).format(timestamp.toDate());
+        final timeStr = DateFormat('HH.mm').format(timestamp.toDate());
+
+        if (!tempData.containsKey(dateStr)) {
+          tempData[dateStr] = {'masuk': '-', 'keluar': '-'};
+        }
+
+        if (type.toLowerCase().contains('masuk')) {
+          tempData[dateStr]!['masuk'] = timeStr;
+        } else if (type.toLowerCase().contains('keluar')) {
+          tempData[dateStr]!['keluar'] = timeStr;
+        }
+      }
+
+      setState(() {
+        _absensiData = tempData;
+      });
+    } catch (e) {
+      debugPrint('Gagal load absensi: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF1F1F1),
       body: Column(
         children: [
-          // ================= HEADER (PERSIS GAMBAR) =================
+          // ================= HEADER =================
           Container(
             color: Colors.white,
             padding: const EdgeInsets.fromLTRB(16, 40, 16, 16),
@@ -65,7 +120,7 @@ class _AbsensiPageState extends State<AbsensiPage> {
                       'Aplikasi Absensi Siswa',
                       style: TextStyle(fontSize: 12, color: Colors.black54),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
                       _username.isNotEmpty ? _username : 'Memuat...',
                       style: const TextStyle(
@@ -113,26 +168,21 @@ class _AbsensiPageState extends State<AbsensiPage> {
                   ),
 
                   Expanded(
-                    child: ListView(
-                      padding: const EdgeInsets.all(14),
-                      children: const [
-                        AbsensiItem(
-                          hari: 'Senin, 15 Des 2025',
-                          masuk: '08.00',
-                          keluar: '13.00',
-                        ),
-                        AbsensiItem(
-                          hari: 'Jum’at, 12 Des 2025',
-                          masuk: '08.00',
-                          keluar: '16.00',
-                        ),
-                        AbsensiItem(
-                          hari: 'Rabu, 17 Des 2025',
-                          masuk: '08.00',
-                          keluar: '17.30',
-                        ),
-                      ],
-                    ),
+                    child: _absensiData.isEmpty
+                        ? const Center(child: Text('Belum ada data absensi'))
+                        : ListView(
+                            padding: const EdgeInsets.all(14),
+                            children: _absensiData.entries.map((entry) {
+                              final date = entry.key;
+                              final masuk = entry.value['masuk'] ?? '-';
+                              final keluar = entry.value['keluar'] ?? '-';
+                              return AbsensiItem(
+                                hari: date,
+                                masuk: masuk,
+                                keluar: keluar,
+                              );
+                            }).toList(),
+                          ),
                   ),
                 ],
               ),
