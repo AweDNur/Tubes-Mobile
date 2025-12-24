@@ -12,10 +12,18 @@ class HistoriPage extends StatefulWidget {
 class _AbsensiPageState extends State<HistoriPage> {
   String _username = '';
 
+  late final Stream<QuerySnapshot> _absensiStream;
+
   @override
   void initState() {
     super.initState();
     _loadUserData();
+
+    // Stream untuk ambil semua dokumen absensi terbaru
+    _absensiStream = FirebaseFirestore.instance
+        .collection('absensi')
+        .orderBy('timestamp', descending: true)
+        .snapshots();
   }
 
   Future<void> _loadUserData() async {
@@ -46,7 +54,7 @@ class _AbsensiPageState extends State<HistoriPage> {
       backgroundColor: const Color(0xFFF1F1F1),
       body: Column(
         children: [
-          // ================= HEADER (DIPERTAHANKAN) =================
+          // HEADER
           Container(
             color: Colors.white,
             padding: const EdgeInsets.fromLTRB(16, 40, 16, 16),
@@ -80,30 +88,50 @@ class _AbsensiPageState extends State<HistoriPage> {
 
           const SizedBox(height: 12),
 
-          // ================= LIST RIWAYAT =================
+          // LIST ABSENSI
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              children: const [
-                RiwayatAbsensiCard(
-                  nama: 'Nama Siswa',
-                  hari: 'Senin, 15 Des 2025',
-                  masuk: '08.00',
-                  keluar: '13.00',
-                ),
-                RiwayatAbsensiCard(
-                  nama: 'Nama Siswa',
-                  hari: 'Senin, 15 Des 2025',
-                  masuk: '08.00',
-                  keluar: '13.00',
-                ),
-                RiwayatAbsensiCard(
-                  nama: 'Nama Siswa',
-                  hari: 'Senin, 15 Des 2025',
-                  masuk: '08.00',
-                  keluar: '13.00',
-                ),
-              ],
+            child: StreamBuilder<QuerySnapshot>(
+              stream: _absensiStream,
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                final docs = snapshot.data!.docs;
+
+                if (docs.isEmpty) {
+                  return const Center(child: Text('Belum ada histori absen'));
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    final data = docs[index].data() as Map<String, dynamic>;
+                    final username = data['username'] ?? 'Tanpa Nama';
+                    final timestamp =
+                        (data['timestamp'] as Timestamp?)?.toDate() ??
+                        DateTime.now();
+
+                    final hari =
+                        '${timestamp.day.toString().padLeft(2, '0')}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.year}';
+                    final jam =
+                        '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}';
+
+                    final isMasuk = (data['type'] ?? '')
+                        .toString()
+                        .toLowerCase()
+                        .contains('masuk');
+
+                    return RiwayatAbsensiCard(
+                      nama: username,
+                      hari: hari,
+                      masuk: isMasuk ? jam : '-',
+                      keluar: !isMasuk ? jam : '-',
+                    );
+                  },
+                );
+              },
             ),
           ),
         ],
@@ -137,7 +165,7 @@ class RiwayatAbsensiCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ===== HEADER CARD =====
+          // HEADER CARD
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -173,10 +201,12 @@ class RiwayatAbsensiCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
 
-                // ===== MASUK =====
+                // MASUK
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.green,
                     borderRadius: BorderRadius.circular(12),
@@ -204,10 +234,12 @@ class RiwayatAbsensiCard extends StatelessWidget {
 
                 const SizedBox(height: 10),
 
-                // ===== KELUAR =====
+                // KELUAR
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.red,
                     borderRadius: BorderRadius.circular(12),

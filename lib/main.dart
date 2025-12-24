@@ -8,6 +8,7 @@ import 'maps.dart';
 import 'mainpage.dart';
 import 'admin/data_siswa.dart';
 import 'admin/mainpage_admin.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
