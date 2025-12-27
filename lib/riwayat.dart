@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 
 class AbsensiPage extends StatefulWidget {
   const AbsensiPage({super.key});
@@ -10,48 +11,58 @@ class AbsensiPage extends StatefulWidget {
 }
 
 class _AbsensiPageState extends State<AbsensiPage> {
-  String _username = '';
+  String _username = 'Memuat...';
+  User? _user;
 
   @override
   void initState() {
     super.initState();
+    _user = FirebaseAuth.instance.currentUser;
     _loadUserData();
   }
 
   Future<void> _loadUserData() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    if (_user == null) return;
 
     try {
       final doc = await FirebaseFirestore.instance
           .collection('users')
-          .doc(user.uid)
+          .doc(_user!.uid)
           .get();
 
       if (doc.exists) {
         setState(() {
-          _username = doc.data()?['username'] ?? user.displayName ?? 'User';
+          _username = doc.data()?['username'] ?? _user!.displayName ?? 'User';
         });
       }
-    } catch (_) {
+    } catch (e) {
       setState(() {
-        _username = user.displayName ?? 'User';
+        _username = 'User';
       });
     }
   }
 
+  String _formatTanggal(Timestamp? timestamp) {
+    if (timestamp == null) return '-';
+    final date = timestamp.toDate();
+    return DateFormat('EEEE, dd MMM yyyy', 'id_ID').format(date);
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_user == null) {
+      return const Scaffold(body: Center(child: Text('User belum login')));
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF1F1F1),
       body: Column(
         children: [
-          // ================= HEADER (PERSIS GAMBAR) =================
+          // ================= HEADER =================
           Container(
             color: Colors.white,
             padding: const EdgeInsets.fromLTRB(16, 40, 16, 16),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 const CircleAvatar(
                   radius: 26,
@@ -61,17 +72,16 @@ class _AbsensiPageState extends State<AbsensiPage> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'Aplikasi Absensi Siswa',
                       style: TextStyle(fontSize: 12, color: Colors.black54),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
-                      _username.isNotEmpty ? _username : 'Memuat...',
+                      _username,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        height: 1.2,
                       ),
                     ),
                   ],
@@ -81,6 +91,8 @@ class _AbsensiPageState extends State<AbsensiPage> {
           ),
 
           const SizedBox(height: 12),
+
+          // ================= RIWAYAT =================
           Expanded(
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 12),
@@ -95,9 +107,8 @@ class _AbsensiPageState extends State<AbsensiPage> {
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: const BoxDecoration(
                       color: Color(0xFF1F2DBD),
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(14),
-                        topRight: Radius.circular(14),
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(14),
                       ),
                     ),
                     child: const Center(
@@ -113,25 +124,42 @@ class _AbsensiPageState extends State<AbsensiPage> {
                   ),
 
                   Expanded(
-                    child: ListView(
-                      padding: const EdgeInsets.all(14),
-                      children: const [
-                        AbsensiItem(
-                          hari: 'Senin, 15 Des 2025',
-                          masuk: '08.00',
-                          keluar: '13.00',
-                        ),
-                        AbsensiItem(
-                          hari: 'Jum’at, 12 Des 2025',
-                          masuk: '08.00',
-                          keluar: '16.00',
-                        ),
-                        AbsensiItem(
-                          hari: 'Rabu, 17 Des 2025',
-                          masuk: '08.00',
-                          keluar: '17.30',
-                        ),
-                      ],
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('absensi')
+                          .where('uid', isEqualTo: _user!.uid)
+                          .orderBy('tanggal', descending: true)
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+
+                        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                          return const Center(
+                            child: Text('Belum ada riwayat absensi'),
+                          );
+                        }
+
+                        return ListView.builder(
+                          padding: const EdgeInsets.all(14),
+                          itemCount: snapshot.data!.docs.length,
+                          itemBuilder: (context, index) {
+                            final data =
+                                snapshot.data!.docs[index].data()
+                                    as Map<String, dynamic>;
+
+                            return AbsensiItem(
+                              hari: _formatTanggal(data['tanggal']),
+                              masuk: data['jamMasuk'] ?? '-',
+                              keluar: data['jamKeluar'] ?? '-',
+                            );
+                          },
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -163,37 +191,32 @@ class AbsensiItem extends StatelessWidget {
       children: [
         Text(hari, style: const TextStyle(fontWeight: FontWeight.w600)),
         const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.green,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Masuk', style: TextStyle(color: Colors.white)),
-              Text(masuk, style: const TextStyle(color: Colors.white)),
-            ],
-          ),
-        ),
+        _buildItem(label: 'Masuk', value: masuk, color: Colors.green),
         const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.red,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Keluar', style: TextStyle(color: Colors.white)),
-              Text(keluar, style: const TextStyle(color: Colors.white)),
-            ],
-          ),
-        ),
+        _buildItem(label: 'Keluar', value: keluar, color: Colors.red),
         const SizedBox(height: 18),
       ],
+    );
+  }
+
+  Widget _buildItem({
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white)),
+          Text(value, style: const TextStyle(color: Colors.white)),
+        ],
+      ),
     );
   }
 }

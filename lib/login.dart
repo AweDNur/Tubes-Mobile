@@ -27,22 +27,36 @@ class _LoginPageState extends State<LoginPage> {
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) return;
 
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
-
+      final googleAuth = await googleUser.authentication;
       final credential = GoogleAuthProvider.credential(
-        idToken: googleAuth.idToken!,
-        accessToken: googleAuth.accessToken!,
+        idToken: googleAuth.idToken,
+        accessToken: googleAuth.accessToken,
       );
 
-      await FirebaseAuth.instance.signInWithCredential(credential);
+      final cred = await FirebaseAuth.instance.signInWithCredential(credential);
+
+      final uid = cred.user!.uid;
+
+      final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+
+      final doc = await userRef.get();
+
+      if (!doc.exists) {
+        await userRef.set({
+          'email': cred.user!.email,
+          'roles': 'siswa',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
       if (!mounted) return;
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const MainPage()),
       );
     } catch (e) {
-      print("Error login Google: $e");
+      _showError('Login Google gagal');
     }
   }
 
@@ -60,6 +74,8 @@ class _LoginPageState extends State<LoginPage> {
       UserCredential cred = await FirebaseAuth.instance
           .signInWithEmailAndPassword(email: email, password: password);
 
+      print('LOGIN AUTH BERHASIL UID: ${cred.user!.uid}');
+
       final uid = cred.user!.uid;
 
       // 2️⃣ Ambil role dari Firestore
@@ -68,12 +84,17 @@ class _LoginPageState extends State<LoginPage> {
           .doc(uid)
           .get();
 
+      print('USER DOC EXISTS: ${userDoc.exists}');
+      print('USER DATA: ${userDoc.data()}');
+
       if (!userDoc.exists) {
         _showError('Data user tidak ditemukan');
         return;
       }
 
-      final roles = userDoc['roles'];
+      final data = userDoc.data()!;
+      final roles = data['roles'] ?? data['role'] ?? 'siswa';
+      print('ROLE USER: $roles');
 
       if (!mounted) return;
 

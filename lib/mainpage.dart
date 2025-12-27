@@ -3,6 +3,7 @@ import 'maps.dart';
 import 'riwayat.dart';
 import 'profile.dart';
 import 'admin/data_siswa.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 class MainPage extends StatefulWidget {
   const MainPage({super.key});

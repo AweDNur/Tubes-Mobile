@@ -8,12 +8,12 @@ import 'maps.dart';
 import 'mainpage.dart';
 import 'admin/data_siswa.dart';
 import 'admin/mainpage_admin.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await initializeDateFormatting('id_ID', null);
   runApp(const MyApp());
 }
 
