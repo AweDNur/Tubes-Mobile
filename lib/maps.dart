@@ -15,6 +15,11 @@ class MapsPage extends StatefulWidget {
 
 class _MapsPageState extends State<MapsPage> {
   String _username = '';
+  bool _canAbsenMasuk = true;
+  bool _canAbsenKeluar = true;
+
+  GoogleMapController? _mapController;
+  static const double maxDistanceMeter = 3000;
 
   GoogleMapController? _mapController;
   StreamSubscription<DocumentSnapshot>? _lokasiListener;
@@ -185,9 +190,15 @@ class _MapsPageState extends State<MapsPage> {
 
   // ===================== UI =====================
   void _showMessage(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override

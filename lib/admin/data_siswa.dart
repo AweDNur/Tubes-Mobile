@@ -52,7 +52,6 @@ class _DataSiswaState extends State<DataSiswa> {
     return Scaffold(
       backgroundColor: const Color(0xFFF1F1F1),
 
-      // ================= FLOATING BUTTON (+) =================
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFF1F2DBD),
         onPressed: () {
@@ -63,7 +62,6 @@ class _DataSiswaState extends State<DataSiswa> {
 
       body: Column(
         children: [
-          // ================= HEADER (TETAP) =================
           Container(
             color: Colors.white,
             padding: const EdgeInsets.fromLTRB(16, 40, 16, 16),
@@ -98,8 +96,6 @@ class _DataSiswaState extends State<DataSiswa> {
           ),
 
           const SizedBox(height: 10),
-
-          // ================= LIST DATA SISWA =================
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: _siswaStream,
@@ -139,7 +135,6 @@ class _DataSiswaState extends State<DataSiswa> {
                       ),
                       child: Row(
                         children: [
-                          /// ===== TEXT =====
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -162,8 +157,6 @@ class _DataSiswaState extends State<DataSiswa> {
                               ],
                             ),
                           ),
-
-                          /// ===== EDIT =====
                           Container(
                             width: 42,
                             height: 42,
@@ -175,12 +168,11 @@ class _DataSiswaState extends State<DataSiswa> {
                             child: IconButton(
                               icon: const Icon(Icons.edit, color: Colors.white),
                               onPressed: () {
-                                // TODO: buka EditSiswaPage(uid)
+                              
                               },
                             ),
                           ),
 
-                          /// ===== DELETE =====
                           Container(
                             width: 42,
                             height: 42,
@@ -240,13 +232,11 @@ class _AddSiswaDialogState extends State<AddSiswaDialog> {
     }
 
     try {
-      // 1️⃣ Buat akun Auth
       UserCredential cred = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(email: email, password: password);
 
       final uid = cred.user!.uid;
 
-      // 2️⃣ Simpan ke Firestore
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'username': username,
         'email': email,
@@ -256,7 +246,7 @@ class _AddSiswaDialogState extends State<AddSiswaDialog> {
       });
 
       if (!mounted) return;
-      Navigator.pop(context); // tutup dialog
+      Navigator.pop(context);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
