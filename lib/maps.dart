@@ -21,7 +21,6 @@ class _MapsPageState extends State<MapsPage> {
   GoogleMapController? _mapController;
   static const double maxDistanceMeter = 3000;
 
-  GoogleMapController? _mapController;
   StreamSubscription<DocumentSnapshot>? _lokasiListener;
 
   LatLng? _lokasiAbsensi;
