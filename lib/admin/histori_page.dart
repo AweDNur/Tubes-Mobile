@@ -1,6 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
 
 class HistoriPage extends StatefulWidget {
   const HistoriPage({super.key});
@@ -246,6 +251,183 @@ class _AbsensiPageState extends State<HistoriPage> {
   }
 }
 
+Future<List<QueryDocumentSnapshot>> fetchAbsensiBulanan({
+  required int bulan,
+  required int tahun,
+  String? uidSiswa, // null = semua siswa
+}) async {
+  final startDate = DateTime(tahun, bulan, 1);
+  final endDate = DateTime(tahun, bulan + 1, 1);
+
+  Query query = FirebaseFirestore.instance
+      .collection('absensi')
+      .where('tanggal', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
+      .where('tanggal', isLessThan: Timestamp.fromDate(endDate));
+
+  if (uidSiswa != null) {
+    query = query.where('uid', isEqualTo: uidSiswa);
+  }
+
+  final snapshot = await query.orderBy('tanggal').get();
+
+  return snapshot.docs;
+}
+
+Future<void> generateRekapPdf({
+  required List<RekapSiswa> rekapList,
+  required int bulan,
+  required int tahun,
+  required BuildContext context,
+}) async {
+  try {
+    final pdf = pw.Document();
+
+    final namaBulan = [
+      '',
+      'Januari',
+      'Februari',
+      'Maret',
+      'April',
+      'Mei',
+      'Juni',
+      'Juli',
+      'Agustus',
+      'September',
+      'Oktober',
+      'November',
+      'Desember',
+    ];
+
+    // ================= PDF CONTENT =================
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        build: (_) => [
+          pw.Center(
+            child: pw.Text(
+              'REKAP ABSENSI SISWA',
+              style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+            ),
+          ),
+          pw.SizedBox(height: 6),
+          pw.Center(child: pw.Text('Bulan ${namaBulan[bulan]} $tahun')),
+          pw.SizedBox(height: 20),
+
+          ...rekapList.map((siswa) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'Nama: ${siswa.nama}',
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                ),
+                pw.SizedBox(height: 8),
+
+                pw.Table.fromTextArray(
+                  headers: ['Tanggal', 'Masuk', 'Keluar'],
+                  data: siswa.harian.map((h) {
+                    final tgl =
+                        '${h.tanggal.day.toString().padLeft(2, '0')}-'
+                        '${h.tanggal.month.toString().padLeft(2, '0')}-'
+                        '${h.tanggal.year}';
+                    return [tgl, h.jamMasuk, h.jamKeluar];
+                  }).toList(),
+                ),
+                pw.SizedBox(height: 20),
+              ],
+            );
+          }),
+        ],
+      ),
+    );
+
+    // ================= SIMPAN FILE =================
+    Directory? downloadDir;
+
+    try {
+      downloadDir = await getDownloadsDirectory();
+    } catch (_) {
+      downloadDir = null;
+    }
+
+    // 🔁 FALLBACK JIKA DOWNLOAD TIDAK TERSEDIA
+    downloadDir ??= await getApplicationDocumentsDirectory();
+
+    final folder = Directory('${downloadDir.path}/RekapAbsensi');
+    if (!await folder.exists()) {
+      await folder.create(recursive: true);
+    }
+
+    final filePath =
+        '${folder.path}/Rekap_Absensi_${namaBulan[bulan]}_$tahun.pdf';
+    final file = File(filePath);
+
+    await file.writeAsBytes(await pdf.save());
+
+    // ================= BUKA FILE =================
+    final openResult = await OpenFilex.open(filePath);
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            openResult.type == ResultType.done
+                ? 'PDF berhasil disimpan & dibuka\n$filePath'
+                : 'PDF tersimpan tapi tidak bisa dibuka otomatis',
+          ),
+        ),
+      );
+    }
+  } catch (e, stack) {
+    debugPrint('ERROR GENERATE PDF: $e');
+    debugPrint('$stack');
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red,
+          content: Text('Gagal menyimpan PDF.\n${e.toString()}'),
+        ),
+      );
+    }
+  }
+}
+
+List<RekapSiswa> olahRekapAbsensi(List<QueryDocumentSnapshot> docs) {
+  final Map<String, RekapSiswa> rekapMap = {};
+
+  for (final doc in docs) {
+    final data = doc.data() as Map<String, dynamic>;
+
+    final uid = data['uid'] as String;
+    final nama = data['username'] as String? ?? 'Tanpa Nama';
+
+    final tanggal = (data['tanggal'] as Timestamp).toDate();
+
+    final jamMasuk = data['jamMasuk'] as String? ?? '-';
+    final jamKeluar = data['jamKeluar'] as String? ?? '-';
+
+    final rekapHarian = RekapHarian(
+      tanggal: tanggal,
+      jamMasuk: jamMasuk,
+      jamKeluar: jamKeluar,
+    );
+
+    if (!rekapMap.containsKey(uid)) {
+      rekapMap[uid] = RekapSiswa(uid: uid, nama: nama, harian: [rekapHarian]);
+    } else {
+      rekapMap[uid]!.harian.add(rekapHarian);
+    }
+  }
+
+  // Urutkan tanggal setiap siswa
+  for (final siswa in rekapMap.values) {
+    siswa.harian.sort((a, b) => a.tanggal.compareTo(b.tanggal));
+  }
+
+  return rekapMap.values.toList();
+}
+
 //rekap data
 void _showRekapDialog(BuildContext context, List<Siswa> siswaList) {
   int selectedMonth = DateTime.now().month;
@@ -255,9 +437,11 @@ void _showRekapDialog(BuildContext context, List<Siswa> siswaList) {
   String? selectedStudentUid;
   String? selectedStudentName;
 
+  final parentContext = context;
+
   showDialog(
-    context: context,
-    builder: (context) {
+    context: parentContext,
+    builder: (dialogContext) {
       return StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
@@ -365,14 +549,13 @@ void _showRekapDialog(BuildContext context, List<Siswa> siswaList) {
             // BUTTONS
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pop(dialogContext),
                 child: const Text('BATAL'),
               ),
               ElevatedButton(
-                onPressed: () {
-                  // VALIDASI
+                onPressed: () async {
                   if (mode == RekapMode.satu && selectedStudentUid == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    ScaffoldMessenger.of(parentContext).showSnackBar(
                       const SnackBar(
                         content: Text('Pilih siswa terlebih dahulu'),
                       ),
@@ -382,10 +565,31 @@ void _showRekapDialog(BuildContext context, List<Siswa> siswaList) {
 
                   Navigator.pop(context);
 
-                  // NANTI: PANGGIL GENERATE PDF
-                  debugPrint('Rekap: $selectedMonth/$selectedYear');
-                  debugPrint('Mode: $mode');
-                  debugPrint('Siswa: $selectedStudentName');
+                  final docs = await fetchAbsensiBulanan(
+                    bulan: selectedMonth,
+                    tahun: selectedYear,
+                    uidSiswa: mode == RekapMode.semua
+                        ? null
+                        : selectedStudentUid,
+                  );
+
+                  final rekapList = olahRekapAbsensi(docs);
+
+                  if (rekapList.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Tidak ada data absensi untuk direkap'),
+                      ),
+                    );
+                    return;
+                  }
+
+                  await generateRekapPdf(
+                    rekapList: rekapList,
+                    bulan: selectedMonth,
+                    tahun: selectedYear,
+                    context: parentContext,
+                  );
                 },
                 child: const Text('GENERATE'),
               ),
@@ -579,4 +783,24 @@ class RiwayatAbsensiCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class RekapHarian {
+  final DateTime tanggal;
+  final String jamMasuk;
+  final String jamKeluar;
+
+  RekapHarian({
+    required this.tanggal,
+    required this.jamMasuk,
+    required this.jamKeluar,
+  });
+}
+
+class RekapSiswa {
+  final String uid;
+  final String nama;
+  final List<RekapHarian> harian;
+
+  RekapSiswa({required this.uid, required this.nama, required this.harian});
 }
