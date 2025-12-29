@@ -169,7 +169,7 @@ class _ProfilePageState extends State<ProfilePage> {
             },
           ),
           _menuItem(
-            icon: Icons.qr_code_scanner,
+            icon: Icons.history,
             title: 'Histori Absensi',
             onTap: () async {
               final result = await Navigator.push(
