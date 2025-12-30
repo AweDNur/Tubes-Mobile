@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 class DataSiswa extends StatefulWidget {
   const DataSiswa({super.key});
@@ -23,6 +24,18 @@ class _DataSiswaState extends State<DataSiswa> {
         .collection('users')
         .where('roles', isEqualTo: 'siswa')
         .snapshots();
+  }
+
+  void showSuccess(String msg) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
+  }
+
+  void showError(String msg) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
   }
 
   Future<void> _loadUserData() async {
@@ -167,8 +180,18 @@ class _DataSiswaState extends State<DataSiswa> {
                             ),
                             child: IconButton(
                               icon: const Icon(Icons.edit, color: Colors.white),
-                              onPressed: () {
-                              
+                              onPressed: () async {
+                                final result = await showDialog<bool>(
+                                  context: context,
+                                  builder: (_) => EditSiswaDialog(
+                                    uid: uid,
+                                    username: data['username'] ?? '',
+                                  ),
+                                );
+
+                                if (result == true) {
+                                  showSuccess('Data siswa berhasil diperbarui');
+                                }
                               },
                             ),
                           ),
@@ -186,10 +209,40 @@ class _DataSiswaState extends State<DataSiswa> {
                                 color: Colors.white,
                               ),
                               onPressed: () async {
-                                await FirebaseFirestore.instance
-                                    .collection('users')
-                                    .doc(uid)
-                                    .delete();
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (_) => AlertDialog(
+                                    title: const Text('Hapus Siswa'),
+                                    content: const Text(
+                                      'Yakin ingin menghapus siswa ini?',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, false),
+                                        child: const Text('BATAL'),
+                                      ),
+                                      ElevatedButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, true),
+                                        child: const Text('HAPUS'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+
+                                if (confirm != true) return;
+
+                                try {
+                                  await FirebaseFirestore.instance
+                                      .collection('users')
+                                      .doc(uid)
+                                      .delete();
+
+                                  showSuccess('Siswa berhasil dihapus');
+                                } catch (e) {
+                                  showError('Gagal menghapus siswa');
+                                }
                               },
                             ),
                           ),
@@ -232,11 +285,29 @@ class _AddSiswaDialogState extends State<AddSiswaDialog> {
     }
 
     try {
-      UserCredential cred = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(email: email, password: password);
+      // ============================
+      // 1. INIT SECONDARY FIREBASE
+      // ============================
+      FirebaseApp secondaryApp = await Firebase.initializeApp(
+        name: 'SecondaryApp',
+        options: Firebase.app().options,
+      );
+
+      FirebaseAuth secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+
+      // ============================
+      // 2. CREATE SISWA ACCOUNT
+      // ============================
+      UserCredential cred = await secondaryAuth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
 
       final uid = cred.user!.uid;
 
+      // ============================
+      // 3. SAVE TO FIRESTORE
+      // ============================
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'username': username,
         'email': email,
@@ -245,15 +316,14 @@ class _AddSiswaDialogState extends State<AddSiswaDialog> {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      if (!mounted) return;
-      Navigator.pop(context);
+      // ============================
+      // 4. CLEAN UP SECONDARY AUTH
+      // ============================
+      await secondaryAuth.signOut();
+      await secondaryApp.delete();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Siswa berhasil ditambahkan'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (!mounted) return;
+      Navigator.pop(context, true);
     } catch (e) {
       _showError('Gagal menambahkan siswa: $e');
     }
@@ -307,6 +377,69 @@ class _AddSiswaDialogState extends State<AddSiswaDialog> {
           child: const Text('BATAL'),
         ),
         ElevatedButton(onPressed: tambahSiswa, child: const Text('TAMBAH')),
+      ],
+    );
+  }
+}
+
+class EditSiswaDialog extends StatefulWidget {
+  final String uid;
+  final String username;
+
+  const EditSiswaDialog({super.key, required this.uid, required this.username});
+
+  @override
+  State<EditSiswaDialog> createState() => _EditSiswaDialogState();
+}
+
+class _EditSiswaDialogState extends State<EditSiswaDialog> {
+  late TextEditingController _usernameController;
+
+  @override
+  void initState() {
+    super.initState();
+    _usernameController = TextEditingController(text: widget.username);
+  }
+
+  Future<void> updateSiswa() async {
+    final username = _usernameController.text.trim();
+
+    if (username.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Username tidak boleh kosong')),
+      );
+      return;
+    }
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.uid)
+          .update({'username': username});
+
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Gagal update: $e')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit Siswa'),
+      content: TextField(
+        controller: _usernameController,
+        decoration: const InputDecoration(labelText: 'Username'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('BATAL'),
+        ),
+        ElevatedButton(onPressed: updateSiswa, child: const Text('SIMPAN')),
       ],
     );
   }
