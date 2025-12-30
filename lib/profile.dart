@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'helpPage_Siswa.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -161,30 +162,13 @@ class _ProfilePageState extends State<ProfilePage> {
           const SizedBox(height: 10),
 
           /// MENU LIST
-          _menuItem(
-            icon: Icons.photo_camera,
-            title: 'Ubah Foto Profil',
-            onTap: () {
-              _pickAndUploadPhoto();
-            },
-          ),
-          _menuItem(
-            icon: Icons.qr_code_scanner,
-            title: 'Scan Barcode',
-            onTap: () async {
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ScanBarcodePage()),
-              );
-
-              if (result != null) {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text('Hasil Scan: $result')));
-              }
-            },
-          ),
-          _menuItem(icon: Icons.help_outline, title: 'Help', onTap: () {}),
+          _menuItem(icon: Icons.help_outline, title: 'Help', 
+          onTap: () async {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const HelpSupport()),
+            );
+          }),
 
           const SizedBox(height: 10),
 
@@ -220,9 +204,7 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  /// =========================
-  /// WIDGET MENU ITEM
-  /// =========================
+
   static Widget _menuItem({
     required IconData icon,
     required String title,

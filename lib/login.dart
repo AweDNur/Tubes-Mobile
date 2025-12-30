@@ -244,47 +244,19 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 12),
-              const Text('or'),
-              const SizedBox(height: 12),
-
-              SizedBox(
-                width: double.infinity,
-                height: 42,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    signInWithGoogle();
-                  },
-                  icon: const Icon(Icons.g_mobiledata, size: 28),
-                  label: const Text(
-                    'Google',
-                    style: TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    side: const BorderSide(color: Colors.black54),
-                  ),
-                ),
-              ),
 
               const SizedBox(height: 14),
 
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text("Don't Have an account? "),
+                  const Text("Aplikasi Absensi Siswa   "),
                   GestureDetector(
                     onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const RegisterPage()),
-                      );
                     },
                     child: const Text(
-                      'Sign Up',
+                      'MySiswa',
                       style: TextStyle(
                         color: Color(0xFF1F2DBD),
                         fontWeight: FontWeight.bold,
