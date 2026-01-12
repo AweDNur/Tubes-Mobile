@@ -67,8 +67,15 @@ class _DataSiswaState extends State<DataSiswa> {
 
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFF1F2DBD),
-        onPressed: () {
-          showDialog(context: context, builder: (_) => const AddSiswaDialog());
+        onPressed: () async {
+          final result = await showDialog<bool>(
+            context: context,
+            builder: (_) => const AddSiswaDialog(),
+          );
+
+          if (result == true) {
+            showSuccess('Siswa berhasil ditambahkan');
+          }
         },
         child: const Icon(Icons.add, size: 30, color: Colors.white),
       ),
@@ -269,25 +276,65 @@ class AddSiswaDialog extends StatefulWidget {
 
 class _AddSiswaDialogState extends State<AddSiswaDialog> {
   bool _obscure = true;
+  String? _errorMessage;
+  bool _isLoading = false;
 
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+
+  void _showError(String msg) {
+    setState(() {
+      _errorMessage = msg;
+    });
+  }
 
   Future<void> tambahSiswa() async {
     final email = _emailController.text.trim();
     final username = _usernameController.text.trim();
     final password = _passwordController.text.trim();
 
+    //validasi
     if (email.isEmpty || username.isEmpty || password.isEmpty) {
       _showError('Semua field wajib diisi');
       return;
     }
 
+    if (password.length < 6) {
+      _showError('Password minimal 6 karakter');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
-      // ============================
-      // 1. INIT SECONDARY FIREBASE
-      // ============================
+      // ================= CEK USERNAME =================
+      final usernameCheck = await FirebaseFirestore.instance
+          .collection('users')
+          .where('username', isEqualTo: username)
+          .limit(1)
+          .get();
+
+      if (usernameCheck.docs.isNotEmpty) {
+        _showError('Username sudah digunakan');
+        return;
+      }
+
+      // ================= CEK EMAIL =================
+      final emailCheck = await FirebaseFirestore.instance
+          .collection('users')
+          .where('email', isEqualTo: email)
+          .limit(1)
+          .get();
+
+      if (emailCheck.docs.isNotEmpty) {
+        _showError('Email sudah terdaftar');
+        return;
+      }
+      //1. INIT SECONDARY FIREBASE
       FirebaseApp secondaryApp = await Firebase.initializeApp(
         name: 'SecondaryApp',
         options: Firebase.app().options,
@@ -324,15 +371,17 @@ class _AddSiswaDialogState extends State<AddSiswaDialog> {
 
       if (!mounted) return;
       Navigator.pop(context, true);
-    } catch (e) {
-      _showError('Gagal menambahkan siswa: $e');
+    } on FirebaseAuthException catch (e) {
+      _showError(e.message ?? 'Gagal menambahkan siswa');
+    } catch (_) {
+      _showError('Terjadi kesalahan, silakan coba lagi');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
-  }
-
-  void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.redAccent),
-    );
   }
 
   @override
@@ -343,6 +392,26 @@ class _AddSiswaDialogState extends State<AddSiswaDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // ================= ERROR BANNER =================
+            if (_errorMessage != null)
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: MaterialBanner(
+                  content: Text(_errorMessage!),
+                  backgroundColor: Colors.red.shade100,
+                  actions: [
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _errorMessage = null;
+                        });
+                      },
+                      child: const Text('TUTUP'),
+                    ),
+                  ],
+                ),
+              ),
+
             TextField(
               controller: _emailController,
               decoration: const InputDecoration(labelText: 'Email'),
@@ -373,10 +442,19 @@ class _AddSiswaDialogState extends State<AddSiswaDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: _isLoading ? null : () => Navigator.pop(context),
           child: const Text('BATAL'),
         ),
-        ElevatedButton(onPressed: tambahSiswa, child: const Text('TAMBAH')),
+        ElevatedButton(
+          onPressed: _isLoading ? null : tambahSiswa,
+          child: _isLoading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('TAMBAH'),
+        ),
       ],
     );
   }
