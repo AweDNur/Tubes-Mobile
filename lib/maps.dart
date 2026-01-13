@@ -19,7 +19,7 @@ class _MapsPageState extends State<MapsPage> {
   bool _canAbsenKeluar = true;
 
   GoogleMapController? _mapController;
-  static const double maxDistanceMeter = 3000;
+  static const double maxDistanceMeter = 1000;
 
   StreamSubscription<DocumentSnapshot>? _lokasiListener;
 

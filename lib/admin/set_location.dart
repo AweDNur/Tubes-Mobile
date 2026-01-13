@@ -15,7 +15,7 @@ class _SetLocationPageState extends State<SetLocationPage> {
   GoogleMapController? _mapController;
 
   LatLng? _selectedLocation;
-  double _radius = 3000;
+  double _radius = 1000;
 
   bool _loading = true;
 
