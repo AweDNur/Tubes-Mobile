@@ -15,11 +15,8 @@ class MapsPage extends StatefulWidget {
 
 class _MapsPageState extends State<MapsPage> {
   String _username = '';
-  bool _canAbsenMasuk = true;
-  bool _canAbsenKeluar = true;
 
   GoogleMapController? _mapController;
-  static const double maxDistanceMeter = 1000;
 
   StreamSubscription<DocumentSnapshot>? _lokasiListener;
 
